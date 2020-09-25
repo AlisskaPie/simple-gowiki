@@ -1,6 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Wiki</title>
+    <LINK REL="STYLESHEET" HREF="default.css">
+    <META NAME="APPLICATION-NAME" CONTENT="Wiki application">
+</head>
 <h1>{{.Title}}</h1>
+<p>[<a href="/edit/">edit</a>]</p>
 
-<p>[<a href="/edit/{{.Title}}">edit</a>]</p>
-
-<body style="background-color:rgb(198, 241, 217);"></body>
 <div>{{printf "%s" .Body}}</div>
+
+</html>

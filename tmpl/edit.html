@@ -1,8 +1,17 @@
-<h1>Editing {{.Title}}</h1>
+<!DOCTYPE html>
+<html lang="en">
 
-<form action="/save/{{.Title}}" method="POST">
+<head>
+    <meta charset="utf-8" />
+    <title>Wiki</title>
+    <LINK REL="STYLESHEET" HREF="default.css">
+    <META NAME="APPLICATION-NAME" CONTENT="Wiki application">
+</head>
+<h1>Editing {{.Title}}</h1>
+<form action="save" method="POST">
     <div><textarea name="body" rows="20" cols="80">{{printf "%s" .Body}}</textarea></div>
     <div><input type="submit" value="Save"></div>
 
-    <body style="background-color:rgb(243, 180, 212);"></body>
 </form>
+
+</html>
