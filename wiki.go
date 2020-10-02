@@ -1,13 +1,18 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
+
+	"github.com/lib/pq"
+	"github.com/subosito/gotenv"
 )
 
 type Page struct {
@@ -15,8 +20,18 @@ type Page struct {
 	Body  []byte
 }
 
-var templates = template.Must(template.ParseFiles("tmpl/edit.html", "tmpl/view.html"))
-var validPath = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9]+)$")
+var (
+	errMultiple = errors.New("multiple response error")
+	db          *sql.DB
+	templates   = template.Must(template.ParseFiles("tmpl/edit.html", "tmpl/view.html"))
+	validPath   = regexp.MustCompile("^/(edit|save|view)/([a-zA-Z0-9]+)$")
+)
+
+func init() {
+	if err := gotenv.Load(); err != nil {
+		log.Fatalf("gotenv.Load: %v", err)
+	}
+}
 
 func viewHandler(w http.ResponseWriter, r *http.Request, title string) {
 	p, err := loadPage(title)
@@ -64,15 +79,26 @@ func (p *Page) save() error {
 }
 
 func loadPage(title string) (*Page, error) {
-	filename := "data/" + title + ".txt"
-	body, err := ioutil.ReadFile(filename)
+	var page Page
+	var pages = []Page{}
+	query := fmt.Sprintf("select * from Page where title = '%v'", title)
+	rows, err := db.Query(query)
 	if err != nil {
-		return nil, fmt.Errorf("ReadFile: %v", err)
+		return nil, fmt.Errorf("Query: %v", err)
 	}
-	return &Page{
-		Title: title,
-		Body:  body,
-	}, nil
+	defer rows.Close()
+
+	for rows.Next() {
+		err := rows.Scan(&page.Title, &page.Body)
+		if err != nil {
+			return nil, fmt.Errorf("rows.Scan: %v", err)
+		}
+		pages = append(pages, page)
+	}
+	if len(pages) > 1 {
+		return nil, errMultiple
+	}
+	return &page, nil
 }
 
 func getTitle(w http.ResponseWriter, r *http.Request) (string, error) {
@@ -92,6 +118,17 @@ func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
 }
 
 func main() {
+	pgURL, err := pq.ParseURL(os.Getenv("ELEPHANTSQL_URL"))
+	if err != nil {
+		log.Fatalf("pq.ParseURL: %v", err)
+	}
+	db, err = sql.Open("postgres", pgURL)
+	if err != nil {
+		log.Fatalf("sql.Open: %v", err)
+	}
+	if err = db.Ping(); err != nil {
+		log.Fatalf("db.Ping: %v", err)
+	}
 	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/view/", makeHandler(viewHandler))
 	http.HandleFunc("/edit/", makeHandler(editHandler))
