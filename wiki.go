@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/subosito/gotenv"
+	"google.golang.org/api/iterator"
 )
 
 type Page struct {
@@ -65,24 +65,26 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 
 func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		m := validPath.FindStringSubmatch(r.URL.Path)
-		if m == nil {
-			http.NotFound(w, r)
-			return
+		title, err := getTitle(w, r)
+		if err != nil {
+			fmt.Errorf("getTitle: %v", err)
 		}
-		fn(w, r, m[2])
+		fn(w, r, title)
 	}
 }
 func (p *Page) save() error {
-	filename := "data/" + p.Title + ".txt"
-	return ioutil.WriteFile(filename, p.Body, 0600)
+	row := db.QueryRow("insert into Page (title, body) values ($1, $2)", p.Title, p.Body)
+	err := row.Err()
+	if err != nil {
+		return fmt.Errorf("QueryRow: %v", err)
+	}
+	return nil
 }
 
 func loadPage(title string) (*Page, error) {
 	var page Page
-	var pages = []Page{}
-	query := fmt.Sprintf("select * from Page where title = '%v'", title)
-	rows, err := db.Query(query)
+	var pages []Page
+	rows, err := db.Query("select * from Page where title = $1", title)
 	if err != nil {
 		return nil, fmt.Errorf("Query: %v", err)
 	}
@@ -90,10 +92,16 @@ func loadPage(title string) (*Page, error) {
 
 	for rows.Next() {
 		err := rows.Scan(&page.Title, &page.Body)
+		if err == iterator.Done {
+			break
+		}
 		if err != nil {
 			return nil, fmt.Errorf("rows.Scan: %v", err)
 		}
 		pages = append(pages, page)
+	}
+	if pages == nil {
+		return nil, sql.ErrNoRows
 	}
 	if len(pages) > 1 {
 		return nil, errMultiple
